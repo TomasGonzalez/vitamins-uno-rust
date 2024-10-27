@@ -3,12 +3,15 @@
 
 use panic_halt as _;
 
+use ufmt::uwriteln; // Import uWrite to send formatted data over UART
 use embedded_hal::digital::v2::OutputPin;  // Import OutputPin trait
 
 #[arduino_hal::entry]
 fn main() -> ! {
     let dp = arduino_hal::Peripherals::take().unwrap();
     let pins = arduino_hal::pins!(dp);
+
+    let mut serial = arduino_hal::default_serial!(dp, pins, 57600); // Set baud rate as required
 
     // Define output pins
     let mut pin13_led = pins.d13.into_output();
@@ -23,7 +26,7 @@ fn main() -> ! {
     let _ = clock.set_low();
     let _ = latch.set_low();
 
-    let mut daysWithoutIngesting = 9;
+    let mut days_without_ingesting = 9;
 
     // Segment patterns for digits 0-9 (assuming common cathode)
     const SEGMENT_PATTERNS: [u8; 10] = [
@@ -40,12 +43,14 @@ fn main() -> ! {
     ];
 
     loop {
+        uwriteln!(&mut serial, "Test message: daysWithoutIngesting = {}\r", days_without_ingesting);
+
         // Indicate shift started
         let _ = pin13_led.set_high();
         // Bring latch low before shifting data
         let _ = latch.set_low();
         // Send the digit pattern
-        shift_out(&mut ds, &mut clock, SEGMENT_PATTERNS[daysWithoutIngesting]);
+        shift_out(&mut ds, &mut clock, SEGMENT_PATTERNS[days_without_ingesting]);
         // Bring latch high to latch the data
         let _ = latch.set_high();
         // Indicate shift completed
