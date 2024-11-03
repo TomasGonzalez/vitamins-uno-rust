@@ -31,7 +31,9 @@ fn main() -> ! {
     let _ = clock.set_low();
     let _ = latch.set_low();
 
-    let days_without_ingesting = 2;
+    let reset_hour = 5;
+    let mut days_without_ingesting = 0;
+    let mut last_date_checked: Option<NaiveDate> = None;
 
     //RTC logic
     let scl = pins.a5.into_pull_up_input();
@@ -41,15 +43,18 @@ fn main() -> ! {
     let mut rtc = Ds1307::new(i2c);
 
     /* 
-        This is for setting the time, only needs to run once, please comment after using. also set the time manually
+        This is for setting the time, only needs to run once, please comment after using 
+         ------------ and do not include in production !!!!! --------------
+        also set the time manually as constants
+
         let date = NaiveDate::from_ymd(2024, 11, 3);
-        let time = NaiveTime::from_hms(20, 35, 0);
+        let time = NaiveTime::from_hms(4, 59, 40);
         rtc.set_datetime(&date.and_time(time)).unwrap();
     */
 
     // Segment patterns for digits 0-9 (assuming common cathode)
     const SEGMENT_PATTERNS: [u8; 10] = [
-        0b00111111, 
+        0b00000000, 
         0b00000110,
         0b01011011,
         0b01001111,
@@ -61,9 +66,29 @@ fn main() -> ! {
         0b01101111,
     ];
 
+    let reset_button = pins.d7.into_pull_up_input();
+
+
     loop {
         uwriteln!(&mut serial, "Test message: daysWithoutIngesting = {}\r", days_without_ingesting);
+
         let datetime = rtc.datetime().unwrap();
+        let current_date = datetime.date();
+        let current_hour = datetime.hour();
+
+        if current_hour == reset_hour {
+            if last_date_checked != Some(current_date) {
+                days_without_ingesting = (days_without_ingesting + 1) % 10;
+                last_date_checked = Some(current_date);
+                uwriteln!(&mut serial, "Incremented days_without_ingesting to: {}\r", days_without_ingesting);
+            }
+        }
+
+        if reset_button.is_low() {
+            days_without_ingesting = 0;
+            uwriteln!(&mut serial, "days_without_ingesting reset to 0 by button press.\r");
+        }
+
         uwriteln!(&mut serial, "Current Date and Time: = {}\r", datetime.hour());
 
         // Indicate shift started
