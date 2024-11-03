@@ -11,8 +11,13 @@ Remember to change /dev/--- to the actual port
 check the port by using:
 `ls /dev/cu.*`
    
-=======================
+===================================================================================
 
+to change the RAVEDUDE port to know which device to flash use in the terminal: 
+
+`export RAVEDUDE_PORT=/dev//dev/cu.usbmodem10` <- you can find the device name using: `ls /dev/cu.*`
+
+================================================================================
 
 
 

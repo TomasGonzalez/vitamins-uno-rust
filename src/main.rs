@@ -3,8 +3,13 @@
 
 use panic_halt as _;
 
-use ufmt::uwriteln; // Import uWrite to send formatted data over UART
+use ufmt::uwriteln;
+
 use embedded_hal::digital::v2::OutputPin;  // Import OutputPin trait
+
+// Allow NaiveDate and NaiveTime, because we use it to set the time when we run the first time. 
+#[allow(unused_imports)]
+use ds1307::{DateTimeAccess, Ds1307, NaiveDate, NaiveTime, Timelike};
 
 #[arduino_hal::entry]
 fn main() -> ! {
@@ -26,7 +31,21 @@ fn main() -> ! {
     let _ = clock.set_low();
     let _ = latch.set_low();
 
-    let mut days_without_ingesting = 9;
+    let days_without_ingesting = 2;
+
+    //RTC logic
+    let scl = pins.a5.into_pull_up_input();
+    let sda = pins.a4.into_pull_up_input();
+    let i2c = arduino_hal::I2c::new(dp.TWI, sda, scl, 50000);
+
+    let mut rtc = Ds1307::new(i2c);
+
+    /* 
+        This is for setting the time, only needs to run once, please comment after using. also set the time manually
+        let date = NaiveDate::from_ymd(2024, 11, 3);
+        let time = NaiveTime::from_hms(20, 35, 0);
+        rtc.set_datetime(&date.and_time(time)).unwrap();
+    */
 
     // Segment patterns for digits 0-9 (assuming common cathode)
     const SEGMENT_PATTERNS: [u8; 10] = [
@@ -44,6 +63,8 @@ fn main() -> ! {
 
     loop {
         uwriteln!(&mut serial, "Test message: daysWithoutIngesting = {}\r", days_without_ingesting);
+        let datetime = rtc.datetime().unwrap();
+        uwriteln!(&mut serial, "Current Date and Time: = {}\r", datetime.hour());
 
         // Indicate shift started
         let _ = pin13_led.set_high();
