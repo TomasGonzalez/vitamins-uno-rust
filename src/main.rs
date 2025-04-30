@@ -32,10 +32,10 @@ fn main() -> ! {
     let _ = latch.set_low();
 
     let reset_hour = 5;
-    let mut days_without_ingesting = 0;
+    let mut days_without_ingesting = 1; // Start with 1 to display "1" initially
     let mut last_date_checked: Option<NaiveDate> = None;
 
-    //RTC logic
+    // RTC logic
     let scl = pins.a5.into_pull_up_input();
     let sda = pins.a4.into_pull_up_input();
     let i2c = arduino_hal::I2c::new(dp.TWI, sda, scl, 50000);
@@ -46,36 +46,42 @@ fn main() -> ! {
         This is for setting the time, only needs to run once, please comment after using 
          ------------ and do not include in production !!!!! --------------
         also set the time manually as constants
-
-        let date = NaiveDate::from_ymd(2024, 11, 3);
-        let time = NaiveTime::from_hms(4, 59, 40);
+        let date = NaiveDate::from_ymd(2025, 5, 30);
+        let time = NaiveTime::from_hms(10, 16, 59);
         rtc.set_datetime(&date.and_time(time)).unwrap();
     */
 
     // Segment patterns for digits 0-9 (assuming common cathode)
     const SEGMENT_PATTERNS: [u8; 10] = [
-        0b00000000, 
-        0b00000110,
-        0b01011011,
-        0b01001111,
-        0b01100110,
-        0b01101101,
-        0b01111101,
-        0b00000111,
-        0b01111111,
-        0b01101111,
+        0b00000000, // 0: all segments off
+        0b00000110, // 1
+        0b01011011, // 2
+        0b01001111, // 3
+        0b01100110, // 4
+        0b01101101, // 5
+        0b01111101, // 6
+        0b00000111, // 7
+        0b01111111, // 8
+        0b01101111, // 9
     ];
 
     let reset_button = pins.d7.into_pull_up_input();
+    let test_button = pins.d8.into_pull_up_input();
 
+    // Variables to track button states and last displayed digit
+    let mut prev_reset_pressed = false;
+    let mut prev_test_pressed = false;
+    let mut last_displayed = 255; // Invalid initial value to force first update
+    
 
     loop {
-        uwriteln!(&mut serial, "Test message: daysWithoutIngesting = {}\r", days_without_ingesting);
-
         let datetime = rtc.datetime().unwrap();
         let current_date = datetime.date();
         let current_hour = datetime.hour();
 
+        uwriteln!(&mut serial, "current time: {}:{}:{}, date: {}\r", current_hour, datetime.minute(), datetime.second());
+
+        // Auto-increment at reset hour
         if current_hour == reset_hour {
             if last_date_checked != Some(current_date) {
                 days_without_ingesting = (days_without_ingesting + 1) % 10;
@@ -84,25 +90,38 @@ fn main() -> ! {
             }
         }
 
-        if reset_button.is_low() {
+        // Read current button states
+        let reset_pressed = reset_button.is_low();
+        let test_pressed = test_button.is_low();
+
+        // Reset button: trigger only on press (high to low transition)
+        if !prev_reset_pressed && reset_pressed {
             days_without_ingesting = 0;
             uwriteln!(&mut serial, "days_without_ingesting reset to 0 by button press.\r");
+            arduino_hal::delay_ms(100); // Longer debounce delay
         }
 
-        uwriteln!(&mut serial, "Current Date and Time: = {}\r", datetime.hour());
+        // Test button: trigger only on press (high to low transition)
+        if !prev_test_pressed && test_pressed {
+            days_without_ingesting = (days_without_ingesting + 1) % 10;
+            uwriteln!(&mut serial, "days_without_ingesting incremented to: {}\r", days_without_ingesting);
+            arduino_hal::delay_ms(100); // Longer debounce delay
+        }
 
-        // Indicate shift started
-        let _ = pin13_led.set_high();
-        // Bring latch low before shifting data
-        let _ = latch.set_low();
-        // Send the digit pattern
-        shift_out(&mut ds, &mut clock, SEGMENT_PATTERNS[days_without_ingesting]);
-        // Bring latch high to latch the data
-        let _ = latch.set_high();
-        // Indicate shift completed
-        let _ = pin13_led.set_low();
-        // Wait before displaying the next digit
-        arduino_hal::delay_ms(1000);
+        // Update previous button states
+        prev_reset_pressed = reset_pressed;
+        prev_test_pressed = test_pressed;
+
+        // Update display only if the value has changed
+        if days_without_ingesting != last_displayed {
+            uwriteln!(&mut serial, "Updating display to: {}\r", days_without_ingesting);
+            last_displayed = days_without_ingesting;
+            let _ = latch.set_low();
+            shift_out(&mut ds, &mut clock, SEGMENT_PATTERNS[days_without_ingesting]);
+            let _ = latch.set_high();
+        }
+
+        arduino_hal::delay_ms(150);
     }
 }
 
