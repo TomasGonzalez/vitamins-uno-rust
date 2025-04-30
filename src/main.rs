@@ -79,7 +79,8 @@ fn main() -> ! {
         let current_date = datetime.date();
         let current_hour = datetime.hour();
 
-        uwriteln!(&mut serial, "current time: {}:{}:{}, date: {}\r", current_hour, datetime.minute(), datetime.second());
+        
+        uwriteln!(&mut serial, "current time: {}:{}:{} \r", current_hour, datetime.minute(), datetime.second());
 
         // Auto-increment at reset hour
         if current_hour == reset_hour {
