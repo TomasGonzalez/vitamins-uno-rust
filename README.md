@@ -6,6 +6,9 @@ The command to flash the pro-nano is:
 
 `avrdude -p m328p -c arduino -b 57600 -P /dev/cu.usbserial-0001 -U flash:w:target/avr-atmega328p/debug/vitamins-uno.elf`
 
+Or ardunino-nano
+`avr-objcopy -O ihex -R .eeprom target/avr-atmega328p/debug/vitamins-uno.elf vitamins-uno.hex & avrdude -v -p m328p -c arduino -P /dev/cu.usbserial-210 -b 115200 -U flash:w:vitamins-uno.hex`
+
 Remember to change /dev/--- to the actual port
 
 check the port by using:

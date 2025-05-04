@@ -2,14 +2,12 @@
 #![no_main]
 
 use panic_halt as _;
-
 use ufmt::uwriteln;
-
 use embedded_hal::digital::v2::OutputPin;  // Import OutputPin trait
 
 // Allow NaiveDate and NaiveTime, because we use it to set the time when we run the first time. 
 #[allow(unused_imports)]
-use ds1307::{DateTimeAccess, Ds1307, NaiveDate, NaiveTime, Timelike};
+use ds1307::{DateTimeAccess, Ds1307, NaiveDate, NaiveTime, Timelike, Datelike};
 
 #[arduino_hal::entry]
 fn main() -> ! {
@@ -33,7 +31,7 @@ fn main() -> ! {
 
     let reset_hour = 5;
     let mut days_without_ingesting = 1; // Start with 1 to display "1" initially
-    let mut last_date_checked: Option<NaiveDate> = None;
+    let mut last_hour_checked: u32 = 0;
 
     // RTC logic
     let scl = pins.a5.into_pull_up_input();
@@ -46,9 +44,12 @@ fn main() -> ! {
         This is for setting the time, only needs to run once, please comment after using 
          ------------ and do not include in production !!!!! --------------
         also set the time manually as constants
-        let date = NaiveDate::from_ymd(2025, 5, 30);
-        let time = NaiveTime::from_hms(10, 16, 59);
+
+        let date  = NaiveDate::from_ymd(2025, 6, 4);
+        let time  = NaiveTime::from_hms(11, 32, 55);
+
         rtc.set_datetime(&date.and_time(time)).unwrap();
+        rtc.set_running().unwrap();
     */
 
     // Segment patterns for digits 0-9 (assuming common cathode)
@@ -72,23 +73,17 @@ fn main() -> ! {
     let mut prev_reset_pressed = false;
     let mut prev_test_pressed = false;
     let mut last_displayed = 255; // Invalid initial value to force first update
-    
 
     loop {
         let datetime = rtc.datetime().unwrap();
-        let current_date = datetime.date();
         let current_hour = datetime.hour();
 
-        
         uwriteln!(&mut serial, "current time: {}:{}:{} \r", current_hour, datetime.minute(), datetime.second());
 
         // Auto-increment at reset hour
-        if current_hour == reset_hour {
-            if last_date_checked != Some(current_date) {
-                days_without_ingesting = (days_without_ingesting + 1) % 10;
-                last_date_checked = Some(current_date);
-                uwriteln!(&mut serial, "Incremented days_without_ingesting to: {}\r", days_without_ingesting);
-            }
+        if current_hour == reset_hour && last_hour_checked != current_hour {
+            days_without_ingesting = (days_without_ingesting + 1) % 10;
+            uwriteln!(&mut serial, "Incremented days_without_ingesting to: {}\r", days_without_ingesting);
         }
 
         // Read current button states
@@ -99,14 +94,12 @@ fn main() -> ! {
         if !prev_reset_pressed && reset_pressed {
             days_without_ingesting = 0;
             uwriteln!(&mut serial, "days_without_ingesting reset to 0 by button press.\r");
-            arduino_hal::delay_ms(100); // Longer debounce delay
         }
 
         // Test button: trigger only on press (high to low transition)
         if !prev_test_pressed && test_pressed {
             days_without_ingesting = (days_without_ingesting + 1) % 10;
             uwriteln!(&mut serial, "days_without_ingesting incremented to: {}\r", days_without_ingesting);
-            arduino_hal::delay_ms(100); // Longer debounce delay
         }
 
         // Update previous button states
@@ -122,7 +115,8 @@ fn main() -> ! {
             let _ = latch.set_high();
         }
 
-        arduino_hal::delay_ms(150);
+        last_hour_checked = current_hour;
+        arduino_hal::delay_ms(50);
     }
 }
 
